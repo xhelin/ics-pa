@@ -1,6 +1,7 @@
 *.*
 *
 !*/
+!/nemu/
 !/nemu/*
 !/nexus-am/*
 !/nanos-lite/*
@@ -9,3 +10,7 @@
 !README.md
 !.gitignore
 !init.sh
+/fceux-am
+*.o
+*.d
+/am-kernels
