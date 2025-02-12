@@ -15,6 +15,7 @@
 
 #include <isa.h>
 #include <cpu/cpu.h>
+#include <memory/paddr.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include "sdb.h"
@@ -54,6 +55,11 @@ static int cmd_q(char *args) {
 
 static int cmd_help(char *args);
 
+static int cmd_info(char *args);
+
+static int cmd_x(char *args);
+
+static int cmd_si(char *args);
 static struct {
   const char *name;
   const char *description;
@@ -62,8 +68,10 @@ static struct {
   { "help", "Display information about all supported commands", cmd_help },
   { "c", "Continue the execution of the program", cmd_c },
   { "q", "Exit NEMU", cmd_q },
-
+  {"si", "si [N]: let program run single N instructions. if N is not provided, N = 1.", cmd_si},
   /* TODO: Add more commands */
+  {"info", "info r: print register status. info w: print watch point info ", cmd_info },
+  {"x", "x N EXPR: scan memory and print value", cmd_x},
 
 };
 
@@ -140,4 +148,67 @@ void init_sdb() {
 
   /* Initialize the watchpoint pool. */
   init_wp_pool();
+}
+
+static int cmd_info(char *args) {
+  /* extract the first argument */
+  char *arg = strtok(NULL, " ");
+
+  if (arg == NULL) {
+    printf("Error: wrong argument number. should only be \"info r\" or \"info w\"\n");
+    return 0;
+  }
+  if (strcmp(arg, "r") == 0) {
+    isa_reg_display();
+  } else if (strcmp(arg, "w") == 0) {
+    // todo:
+  }
+  return 0;
+}
+
+static int cmd_si(char *args) {
+  char *arg = strtok(NULL, " ");
+
+  int n = 1;
+  if (arg != NULL) {
+    n = atoi(arg);
+    if (n <= 0) {
+      printf("Error: N should be larger than 0\n");
+      return 0;
+    }
+  }
+
+  cpu_exec(n);
+  return 0;
+}
+
+static int cmd_x(char *args) {
+  char *arg = strtok(NULL, " ");
+
+  if (arg == NULL) {
+    printf("Error: wrong format\n");
+    return 0;
+  }
+  
+  int n = atoi(arg);
+  if (n <= 0) {
+    printf("Error: N should be larger than 0\n");
+    return 0;
+  }
+
+  // todo: support expr
+  arg = strtok(NULL, " ");
+  if (arg == NULL) {
+    printf("Error: wrong format\n");
+    return 0;
+  }
+
+  int addr = strtol(arg, NULL, 16);
+  for (int i = 0; i < n; i++) {
+    word_t val = paddr_read(addr, 4);
+    printf("0x%08x:\t%08x\n", addr, val);
+    addr+=4;
+  }
+
+  return 0;
 }
