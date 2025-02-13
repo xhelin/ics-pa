@@ -14,6 +14,7 @@
 ***************************************************************************************/
 
 #include <isa.h>
+#include <memory/paddr.h>
 
 /* We use the POSIX regex functions to process regular expressions.
  * Type 'man regex' for more information about POSIX regex functions.
@@ -28,6 +29,11 @@ enum {
   /* TODO: Add more token types */
   TK_NUMBER,
   TK_NEGATIVE,
+  TK_DEREF,
+  TK_HEX,
+  TK_REGISTER,
+  TK_NOT_EQ,
+  TK_AND,
 };
 
 static struct rule {
@@ -39,15 +45,19 @@ static struct rule {
    * Pay attention to the precedence level of different rules.
    */
 
+  {"0x[0-9a-fA-F]+", TK_HEX},
+  {"\\$[a-zA-Z0-9]+", TK_REGISTER},
   {"[0-9]+", TK_NUMBER},
   {" +", TK_NOTYPE},    // spaces
   {"\\+", '+'},         // plus
   {"-", '-'},           // minus
-  {"\\*", '*'},           // multiply
+  {"\\*", '*'},         // multiply
   {"/", '/'},           // divide
   {"\\(", '('},           // left-bracket
   {"\\)", ')'},           // right-bracket
   {"==", TK_EQ},        // equal
+  {"!=", TK_NOT_EQ},    // not equal
+  {"&&", TK_AND},       // and
 };
 
 #define NR_REGEX ARRLEN(rules)
@@ -120,14 +130,25 @@ static bool make_token(char *e) {
         tokens[nr_token].str[substr_len] = 0;
 
         if (rules[i].token_type == '-') {
-          if (nr_token == 0 || 
+          if (nr_token == 0 ||
             tokens[nr_token-1].type == '+' ||
             tokens[nr_token-1].type == '-' ||
             tokens[nr_token-1].type == '*' ||
             tokens[nr_token-1].type == '/' ||
+            tokens[nr_token-1].type == TK_LEFT_PAREN ||
             tokens[nr_token-1].type == TK_NEGATIVE
           ) {
             tokens[nr_token].type = TK_NEGATIVE;
+          }
+        } else if (rules[i].token_type == '*') {
+          if (nr_token == 0 ||
+            tokens[nr_token-1].type == '+' ||
+            tokens[nr_token-1].type == '-' ||
+            tokens[nr_token-1].type == '*' ||
+            tokens[nr_token-1].type == '/' ||
+            tokens[nr_token-1].type == TK_LEFT_PAREN
+          ) {
+            tokens[nr_token].type = TK_DEREF;
           }
         }
 
@@ -160,8 +181,26 @@ static int find_right_paren(int p, int q) {
   return -1;
 }
 
+static int get_priority(int token) {
+  switch (token) {
+    case '*':
+    case '/':
+      return 100;
+    case '+':
+    case '-':
+      return 99;
+    case TK_EQ:
+    case TK_NOT_EQ:
+      return 98;
+    case TK_AND:
+      return 97;
+    default:
+      return -1;
+  }
+}
+
 static int find_main_op(int p, int q) {
-  int priority = 1;
+  int priority = 100;
   int main_op = -1;
   int level = 0;
   for (int i = p; i <= q; i++) {
@@ -175,12 +214,13 @@ static int find_main_op(int p, int q) {
     if (level > 0) {
       continue;
     }
-    if (tokens[i].type == '+' || tokens[i].type == '-') {
+
+    int p = get_priority(tokens[i].type);
+    if (p == -1) continue;
+
+    if (priority >= p) {
       main_op = i;
-      priority = 0;
-    } else if (priority >= 1 && (tokens[i].type == '*' || tokens[i].type == '/')) {
-      main_op = i;
-      priority = 1;
+      priority = p;
     }
   }
   return main_op;
@@ -191,13 +231,24 @@ static int eval(int p, int q, bool *success) {
     printf("Error: format error\n");
     goto ERROR_RETURN;
   } else if (p == q) {
-    if (tokens[p].type != TK_NUMBER) {
-      printf("Error: number is expected\n");
-      goto ERROR_RETURN;
-    }
-
+    int val = 0;
     *success = true;
-    return atoi(tokens[p].str);
+    switch (tokens[p].type) {
+      case TK_NUMBER:
+        return atoi(tokens[p].str);
+      case TK_REGISTER:
+        val = isa_reg_str2val(tokens[p].str, success);
+        if (!*success) {
+          printf("Error: wrong register name [%s]\n", tokens[p].str);
+          goto ERROR_RETURN;
+        } else {
+          return val;
+        }
+      case TK_HEX:
+        return strtol(tokens[p].str, NULL, 16);
+    }
+    printf("Error: number is expected\n");
+    goto ERROR_RETURN;
   } else if (tokens[p].type == TK_LEFT_PAREN) {
     int right_paren_pos = find_right_paren(p, q);
     if (right_paren_pos == -1) {
@@ -213,6 +264,13 @@ static int eval(int p, int q, bool *success) {
   if (main_op == -1) {
     if (tokens[p].type == TK_NEGATIVE) {
       return -eval(p+1, q, success);
+    } else if (tokens[p].type == TK_DEREF) {
+      word_t addr = eval(p+1, q, success);
+      if (!*success) {
+        goto ERROR_RETURN;
+      }
+      word_t val = paddr_read(addr, 4);
+      return val;
     }
     printf("Error: could not find main op\n");
     goto ERROR_RETURN;
@@ -239,6 +297,12 @@ static int eval(int p, int q, bool *success) {
         goto ERROR_RETURN;
       }
       return val1/val2;
+    case TK_EQ:
+      return val1 == val2 ? 1 : 0;
+    case TK_NOT_EQ:
+      return val1 != val2 ? 1 : 0;
+    case TK_AND:
+      return val1 && val2;
     default:
       printf("Error: unexpected token type: %d\n", tokens[main_op].type);
       goto ERROR_RETURN;

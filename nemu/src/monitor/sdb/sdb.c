@@ -63,6 +63,10 @@ static int cmd_si(char *args);
 
 static int cmd_p(char *args);
 
+static int cmd_w(char *args);
+
+static int cmd_dw(char *args);
+
 static struct {
   const char *name;
   const char *description;
@@ -76,6 +80,8 @@ static struct {
   {"info", "info r: print register status. info w: print watch point info ", cmd_info },
   {"x", "x N EXPR: scan memory and print value", cmd_x},
   {"p", "p EXPR: evaluate expr and print value", cmd_p},
+  {"w", "w EXPR: set watchpoint. When EXPR's evaluate value changes, pause the program", cmd_w},
+  {"d", "w N: delete watchpoint.", cmd_dw},
 };
 
 #define NR_CMD ARRLEN(cmd_table)
@@ -164,7 +170,7 @@ static int cmd_info(char *args) {
   if (strcmp(arg, "r") == 0) {
     isa_reg_display();
   } else if (strcmp(arg, "w") == 0) {
-    // todo:
+    print_wps();
   }
   return 0;
 }
@@ -199,17 +205,16 @@ static int cmd_x(char *args) {
     return 0;
   }
 
-  // todo: support expr
-  arg = strtok(NULL, " ");
-  if (arg == NULL) {
-    printf("Error: wrong format\n");
+  arg = arg + strlen(arg) + 1;
+
+  bool success = false;
+  int addr = expr(arg, &success);
+  if (!success) {
     return 0;
   }
-
-  int addr = strtol(arg, NULL, 16);
   for (int i = 0; i < n; i++) {
     word_t val = paddr_read(addr, 4);
-    printf("0x%08x:\t%08x\n", addr, val);
+    printf("0x%08x:\t0x%08x\t%u\n", addr, val, val);
     addr+=4;
   }
 
@@ -224,5 +229,45 @@ static int cmd_p(char *args) {
   if (success) {
     printf("$%d = %u\n", expr_n, val);
   }
+  return 0;
+}
+
+static int cmd_w(char *args) {
+  WP* wp = new_wp();
+  if (wp == NULL) {
+    printf("Error: unable to new watchpoint.\n");
+    return 0;
+  }
+
+  bool success = false;
+  word_t val = expr(args, &success);
+  if (!success) {
+    printf("Error: unable to evaluate expr.\n");
+    free_wp(wp->NO);
+    return 0;
+  }
+
+  printf("Info: Successfully set watchpoint. init value = %u.\n", val);
+  strcpy(wp->str, args);
+  wp->val = val;
+
+  return 0;
+}
+
+static int cmd_dw(char *args) {
+  char *arg = strtok(NULL, " ");
+  if (arg == NULL) {
+    printf("Error: wrong format\n");
+    return 0;
+  }
+
+  int wp_id = atoi(arg);
+  bool success = free_wp(wp_id);
+  if (!success) {
+    printf("Error: free watchpoint failed\n");
+  } else {
+    printf("Free watchpoint success\n");
+  }
+
   return 0;
 }

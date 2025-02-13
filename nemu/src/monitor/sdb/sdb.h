@@ -22,4 +22,20 @@ word_t expr(char *e, bool *success);
 
 int check_expr_file();
 
+typedef struct watchpoint {
+  int NO;
+  struct watchpoint *next;
+
+  /* TODO: Add more members if necessary */
+
+  char str[65535];
+  word_t val;
+} WP;
+
+WP* new_wp();
+
+bool free_wp(int wp_id);
+
+void print_wps();
+
 #endif
