@@ -31,8 +31,47 @@ static char *code_format =
 "  return 0; "
 "}";
 
+static int k = 0;
+
+static void gen_num() {
+  int n = rand();
+  k += sprintf(buf+k, "%u", n);
+}
+
+static int choose(int i) {
+  return rand() % i;
+}
+
+static void gen_rand_op() {
+  static char ops[] = {'+', '-', '*', '/'};
+  if (choose(3) == 0) {
+    buf[k++] = ' ';
+  }
+  buf[k++] = ops[choose(sizeof(ops))];
+  if (choose(3) == 0) {
+    buf[k++] = ' ';
+  }
+}
+
+static void gen(char c) {
+  buf[k++] = c;
+}
+
 static void gen_rand_expr() {
-  buf[0] = '\0';
+  if (choose(2) == 0) {
+    gen(' ');
+  }
+  if (k >= 100) {
+    gen_num();
+    return;
+  }
+  switch (choose(4)) {
+    case 0: gen_num(); break;
+    case 1: gen('('); gen_rand_expr(); gen(')'); break;
+    default: gen_rand_expr(); gen_rand_op(); gen_rand_expr(); break;
+  }
+
+  buf[k] = 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -44,6 +83,7 @@ int main(int argc, char *argv[]) {
   }
   int i;
   for (i = 0; i < loop; i ++) {
+    k = 0;
     gen_rand_expr();
 
     sprintf(code_buf, code_format, buf);
@@ -53,8 +93,11 @@ int main(int argc, char *argv[]) {
     fputs(code_buf, fp);
     fclose(fp);
 
-    int ret = system("gcc /tmp/.code.c -o /tmp/.expr");
-    if (ret != 0) continue;
+    int ret = system("gcc -Werror=div-by-zero /tmp/.code.c -o /tmp/.expr");
+    if (ret != 0) {
+      i--;
+      continue;
+    }
 
     fp = popen("/tmp/.expr", "r");
     assert(fp != NULL);

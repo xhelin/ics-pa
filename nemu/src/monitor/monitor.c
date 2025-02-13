@@ -15,6 +15,7 @@
 
 #include <isa.h>
 #include <memory/paddr.h>
+#include "sdb/sdb.h"
 
 void init_rand();
 void init_log(const char *log_file);
@@ -132,6 +133,10 @@ void init_monitor(int argc, char *argv[]) {
 
   /* Display welcome message. */
   welcome();
+
+  // this is the expr check logic
+  check_expr_file();
+  exit(0);
 }
 #else // CONFIG_TARGET_AM
 static long load_img() {

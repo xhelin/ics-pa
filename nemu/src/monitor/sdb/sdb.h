@@ -20,4 +20,6 @@
 
 word_t expr(char *e, bool *success);
 
+int check_expr_file();
+
 #endif

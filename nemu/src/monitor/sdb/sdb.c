@@ -60,6 +60,9 @@ static int cmd_info(char *args);
 static int cmd_x(char *args);
 
 static int cmd_si(char *args);
+
+static int cmd_p(char *args);
+
 static struct {
   const char *name;
   const char *description;
@@ -72,7 +75,7 @@ static struct {
   /* TODO: Add more commands */
   {"info", "info r: print register status. info w: print watch point info ", cmd_info },
   {"x", "x N EXPR: scan memory and print value", cmd_x},
-
+  {"p", "p EXPR: evaluate expr and print value", cmd_p},
 };
 
 #define NR_CMD ARRLEN(cmd_table)
@@ -210,5 +213,16 @@ static int cmd_x(char *args) {
     addr+=4;
   }
 
+  return 0;
+}
+
+static int cmd_p(char *args) {
+  static int expr_n = 0;
+  expr_n++;
+  bool success = false;
+  word_t val = expr(args, &success);
+  if (success) {
+    printf("$%d = %u\n", expr_n, val);
+  }
   return 0;
 }
